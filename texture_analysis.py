@@ -3,6 +3,7 @@ import numpy as np
 from skimage.color import rgb2hsv
 from skimage.filters import sobel
 from skimage.measure import label, regionprops
+from scipy import ndimage
 
 from math_utils import weighted_mean_and_std, rgb_to_luminance, get_contrast_ratio
 
@@ -11,15 +12,92 @@ DARK_BACKGROUND_LUM = 0.0437 # luminance of #3b3b3b
 # print(rgb_to_luminance(np.array((139, 139, 139), dtype=np.uint8)))
 # print(rgb_to_luminance(np.array((59, 59, 59), dtype=np.uint8)))
 
+FOUR_CONTIGUITY = np.array([
+        [False, True, False],
+        [True,  True, True],
+        [False, True, False]
+    ], dtype=bool)
+TOP_CONTIGUITY = np.array([
+        [False, True, False],
+        [False,  True, False],
+        [False, False, False]
+    ], dtype=bool)
+BOTTOM_CONTIGUITY = np.array([
+        [False, False, False],
+        [False,  True, False],
+        [False, True, False]
+    ], dtype=bool)
+
 def get_palette_contrast():
     """
     Get the contrast metrics of a palette.
     """
     pass
 
-def get_texture_contrast(img, name):
+def get_texture_contrast(img):
     """
     Input an image to get a dict containing the contrast metrics of its texture.
+    """
+    img_arr = np.array(img)
+    rgb = img_arr[..., :3]
+    alpha = img_arr[..., 3]
+    opaque_mask = alpha == 255
+    inner_mask = get_inner_mask(opaque_mask)
+    outline_mask = get_outline_mask(opaque_mask)
+    top_mask, bottom_mask = get_top_and_bottom_masks(opaque_mask)
+    
+    area = np.count_nonzero(opaque_mask)
+    area_outline = int(np.sum(outline_mask))
+
+    lums = rgb_to_luminance(rgb)
+    contrast_values, contrast_weights = get_internal_contrast(lums, opaque_mask)
+    contrast_avg, contrast_dev = weighted_mean_and_std(contrast_values, contrast_weights)
+    lums_inner = lums[inner_mask]
+    lums_outline = lums[outline_mask]
+
+    luminance_avg = np.mean(lums)
+    luminance_median = np.median(lums)
+    lum_outline_avg = np.mean(lums_outline)
+
+    lums_top = lums[top_mask]
+    lums_bottom = lums[bottom_mask]
+    lum_top_avg = np.mean(lums_top)
+    lum_bottom_avg = np.mean(lums_bottom)
+
+    unique_lums = np.unique(lums)
+    luminance_highlight = ((unique_lums[-1] + unique_lums[-2]) / 2) if len(unique_lums > 2) else luminance_avg
+    
+    return {
+        "area": area, # Number of opaque pixels
+        "area_outline": area_outline, # Number of outline pixels
+        "area_inner": area - area_outline, # Number of inner pixels
+        "color_count": get_color_count(rgb[opaque_mask]), # Number of distinct opaque color codes
+        # Average edge strength within the inner pixels
+        "internal_edge_density": float(get_internal_edge_density(lums, inner_mask)),
+        # Internal contrast ratio = WCAG contrast ratios between adjacent opaque pixels
+        "internal_contrast_ratio_avg": float(contrast_avg),
+        "internal_contrast_ratio_dev": float(contrast_dev),
+        "luminance_avg": float(luminance_avg), # Average luminance
+        "luminance_dev": float(np.std(lums)), # Deviation of luminance
+        "luminance_median": float(luminance_median), # Median of luminance
+        "lum_inner_avg": float(np.mean(lums_inner)),
+        "lum_inner_dev": float(np.std(lums_inner)),
+        "lum_outline_avg": float(lum_outline_avg),
+        "lum_outline_dev": float(np.std(lums_outline)),
+        # Outline boldness = average contrast ratio between each outline pixel and its neighboring non-outline pixels
+        "outline_boldness": float(np.mean(get_outline_boldness(lums, inner_mask, outline_mask))),
+        # Highlight luminance = average of the two largest distinct luminances
+        "luminance_highlight": float(luminance_highlight),
+        # Various contrast ratios targeting specific tones of the texture
+        "contrast_highlight_outline": float(get_contrast_ratio(luminance_highlight, lum_outline_avg)),
+        "contrast_highlight_median": float(get_contrast_ratio(luminance_highlight, luminance_median)),
+        "contrast_median_outline": float(get_contrast_ratio(luminance_median, lum_bottom_avg)),
+        "contrast_top_bottom": float(get_contrast_ratio(lum_top_avg, lum_bottom_avg))
+    }
+
+def get_texture_contrast_old(img, name):
+    """
+    Here for reference
     """
     img_arr = np.array(img)
     rgb = img_arr[..., :3]
@@ -28,7 +106,7 @@ def get_texture_contrast(img, name):
     opaque_rgb = rgb[opaque_mask] # lacks positional info
 
     area = np.count_nonzero(opaque_mask)
-    area_outline = get_area_outline(opaque_mask)
+    area_outline = int(np.sum(get_outline_mask(opaque_mask)))
     color_count = get_color_count(opaque_rgb)
     color_4contiguity, color_8contiguity = get_color_contiguity(rgb, opaque_mask)
     edge_density = np.mean(sobel(rgb.mean(axis=2)))
@@ -74,22 +152,49 @@ def get_touches_transparent_mask(opaque_mask):
     """
     Input opaque mask to get all transparent and outline pixels.
     """
+    inner_mask = ndimage.binary_erosion(
+        opaque_mask,
+        structure=FOUR_CONTIGUITY,
+        border_value=False # Treat outside image as transparent for erosion
+    )
+
+    return ~inner_mask
+
+def get_inner_mask(opaque_mask):
+    """
+    Input opaque mask to get all inner pixels, OR the outline mask if no inner pixels are found.
+    """
+    transparent_mask = get_touches_transparent_mask(opaque_mask)
+    inner_mask = ~transparent_mask
+    if not inner_mask.any():
+        return opaque_mask & transparent_mask
+    else:
+        return inner_mask
+
+def get_outline_mask(opaque_mask):
+    """
+    Input opaque mask to get all outline pixels.
+    """
+    return opaque_mask & get_touches_transparent_mask(opaque_mask)
+
+def get_top_and_bottom_masks(opaque_mask):
+    """
+    Input opaque mask to get top outline and bottom outline.
+    """
     transparent_mask = ~opaque_mask
 
-    # Any neighbor is transparent?
-    up    = np.pad(transparent_mask[1:, :],   ((0,1),(0,0)), constant_values=False)
-    down  = np.pad(transparent_mask[:-1, :],  ((1,0),(0,0)), constant_values=False)
-    left  = np.pad(transparent_mask[:, 1:],   ((0,0),(0,1)), constant_values=False)
-    right = np.pad(transparent_mask[:, :-1],  ((0,0),(1,0)), constant_values=False)
-    touches_transparent = up | down | left | right
+    top_outline = ndimage.binary_erosion(
+        opaque_mask,
+        structure=TOP_CONTIGUITY,
+        border_value=False # Treat outside image as transparent for erosion
+    ) & opaque_mask
+    bottom_outline = ndimage.binary_erosion(
+        opaque_mask,
+        structure=BOTTOM_CONTIGUITY,
+        border_value=False # Treat outside image as transparent for erosion
+    ) & opaque_mask
 
-    return touches_transparent
-
-def get_area_outline(opaque_mask):
-    """
-    Input opaque mask to count the number of outline pixels.
-    """
-    return int(np.sum(opaque_mask & get_touches_transparent_mask(opaque_mask)))
+    return top_outline, bottom_outline
 
 def get_color_count(opaque_rgb):
     """
@@ -134,7 +239,7 @@ def get_color_contiguity(rgb, opaque_mask):
 
 def get_internal_contrast(lum, opaque_mask):
     """
-    Input an image's luminance and alpha to get data (value array, weight array) on its internal contrast.
+    Input a luminance array and a mask to get data (value array, weight array) on the internal contrast.
     """
     H, W = lum.shape
 
@@ -146,7 +251,7 @@ def get_internal_contrast(lum, opaque_mask):
     for y in range(H):
         for x in range(W):
             if not opaque_mask[y, x]:
-                continue  # skip transparent pixel
+                continue  # skip transparent / unmasked pixel
 
             for directions, weight in [(adjacents, 1), (diagonals, 0.707)]:
                 for dy, dx in directions:
@@ -160,6 +265,49 @@ def get_internal_contrast(lum, opaque_mask):
         return None, None
 
     return np.array(contrasts), np.array(weights)
+
+def get_internal_edge_density(lums, inner_mask):
+    """
+    Calculates average Sobel edge magnitude for inner pixels only.
+    """
+    # Apply Sobel filter in x and y directions
+    #    mode='constant', cval=0.0: Pads the image with zeros at the borders,
+    #    which is generally suitable for textures where outside is transparent.
+    sobel_x = sobel(lums, axis=1, mode='constant', cval=0.0)
+    sobel_y = sobel(lums, axis=0, mode='constant', cval=0.0)
+    gradient_magnitude = np.sqrt(sobel_x**2 + sobel_y**2)
+    inner_magnitudes = gradient_magnitude[inner_mask]
+
+    return np.mean(inner_magnitudes)
+
+def get_outline_boldness(lum, inner_mask, outline_mask):
+    """
+    The contrast ratios between each outline pixel and its neighboring non-outline pixels
+        (unless there are none, in which case the ratios between outline pixels).
+    """
+    H, W = lum.shape
+
+    adjacents = [(1, 0), (0, 1), (-1, 0), (0, -1)]
+    diagonals = [(1, 1), (1, -1), (-1, 1), (-1, -1)]
+
+    ratios = []
+    weights = []
+    for y in range(H):
+        for x in range(W):
+            if not outline_mask[y, x]:
+                continue
+
+            for directions, weight in [(adjacents, 1), (diagonals, 0.707)]:
+                for dy, dx in directions:
+                    ny, nx = y + dy, x + dx
+                    if 0 <= ny < H and 0 <= nx < W and inner_mask[ny, nx]:
+                        ratios.append(get_contrast_ratio(lum[y, x], lum[ny, nx]))
+                        weights.append(weight)
+
+    if len(ratios) == 0:
+        return None, None
+
+    return np.array(ratios), np.array(weights)
 
 def get_pop_factors(lum, opaque_mask):
     touches_transparent = get_touches_transparent_mask(opaque_mask)

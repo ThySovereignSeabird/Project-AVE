@@ -2,7 +2,9 @@ from PIL import Image
 import os
 import csv
 
-from texture_analysis import get_texture_contrast
+from texture_analysis import get_texture_contrast_old, get_texture_contrast
+
+LABELS_DIRECTORY = "labels/"
 
 def load_texture(path):
     """
@@ -13,67 +15,90 @@ def load_texture(path):
 def get_item_directory(namespace):
     return "dataset/" + namespace + "/items/"
 
-def export_all_in_namespace(namespace):
+def find_dict_by_name(list_of_dicts, name):
+    return next((d for d in list_of_dicts if d.get("name") == name), None)
+
+def export_namespace(namespace):
     """
     Collects data on all .png textures in the namespace's folder, then exports data as .csv.
     """
+    # Collect label data
+    label_data = []
+    labels_path = f"labels/{namespace}.csv"
+    try:
+        with open(labels_path, mode='r', newline='', encoding='utf-8') as file:
+            reader = csv.DictReader(file)
+            for row in reader:
+                label_data.append(row)
+    except FileNotFoundError:
+        print(f"Error: The file '{labels_path}' was not found.")
+        exit(1)
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        exit(1)
+
+    export_data(collect_data(label_data, namespace), namespace)
+
+def export_all():
+    """
+    Collects data on all namespaces with .csvs in labels/, then exports collective data as .csv.
+    """
+    data = []
+    # Collect label data
+    try:
+        label_files = sorted(f for f in os.listdir(LABELS_DIRECTORY) if f.endswith(".csv"))
+        for label_file in label_files:
+            label_data = []
+            with open(LABELS_DIRECTORY + label_file, mode='r', newline='', encoding='utf-8') as file:
+                reader = csv.DictReader(file)
+                for row in reader:
+                    label_data.append(row)
+            namespace = os.path.splitext(label_file)[0]
+            data += collect_data(label_data, namespace)
+    except FileNotFoundError:
+        print(f"Error: No .csv in labels/ was found.")
+        exit(1)
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        exit(1)
+
+    export_data(data, "all")
+
+def collect_data(label_data, namespace):
+    """
+    Collect the data on all items from one namespace.
+    """
+    data = []
     folder = get_item_directory(namespace)
 
-    # Collect exemplars
-    exemplars = set()
-    with open(f"{folder}exemplars.txt") as f:
-        for line in f:
-            exemplars.add(line.strip())
-
-    data = []
-    for fname in os.listdir(folder):
-        if fname.endswith(".png"):
-            img = load_texture(os.path.join(folder, fname))
-            collected = collect_data(img, fname)
-            collected["exemplar"] = fname in exemplars
-            collected["name"] = f"{namespace}/{fname}"
-            data.append(collected)
+    filenames = sorted(f for f in os.listdir(folder) if f.endswith(".png"))
+    for fname in filenames:
+        label_dict = find_dict_by_name(label_data, fname)
+        context = {"name": f"{namespace}/{fname}",
+                    "rating": label_dict.get("rating", "unsightly"),
+                    "multicolor": label_dict.get("multicolor", False)}
+        img = load_texture(os.path.join(folder, fname))
+        data.append(context | get_texture_contrast(img))
 
     if not data:
         print("No data collected.")
         exit(1)
 
+    return data
+
+def export_data(data, title):
     keys = data[0].keys()
-    with open(f"{namespace}_item_stats.csv", "w", newline="") as f:
+    with open(f"output/{title}_item_stats.csv", "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=keys)
         writer.writeheader()
         writer.writerows(data)
-
-def export_exemplars_in_namespace(namespace):
+  
+def rollcall_namespace(namespace):
     """
-    Collects data from textures identified by exemplars.txt in the namespace's folder, then exports data as .csv.
-    """
-    folder = get_item_directory(namespace)
-    data = []
-    with open(f"{folder}exemplars.txt") as exemplars:
-        for line in exemplars:
-            fname = line.strip()
-            if fname.endswith(".png"):
-                img = load_texture(os.path.join(folder, fname))
-                data.append(collect_data(img, fname))
-
-    if not data:
-        print("No data collected.")
-        exit(1)
-
-    keys = data[0].keys()
-    with open(f"{namespace}_exemplar_item_stats.csv", "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=keys)
-        writer.writeheader()
-        writer.writerows(data)
-    
-
-def write_all_in_namespace(namespace):
-    """
-    Writes the names of all .png textures in the namespace's folder, then exports as .txt.
+    Writes the names of all .png textures in the namespace's folder, then exports as .csv.
     """
     folder = get_item_directory(namespace)
-    output_file = f"{namespace}_items.txt"
+    output_file = f"output/{namespace}_rollcall.csv"
 
     filenames = sorted(fname for fname in os.listdir(folder) if fname.endswith(".png"))
     with open(output_file, "w") as f:
@@ -81,9 +106,3 @@ def write_all_in_namespace(namespace):
             f.write(name + "\n")
 
     print(f"Wrote {len(filenames)} entries to {output_file}")
-    
-def collect_data(img, fname):
-    """
-    Collect data from the input texture.
-    """
-    return get_texture_contrast(img, fname)
