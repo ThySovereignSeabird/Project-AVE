@@ -54,9 +54,10 @@ def get_texture_contrast(img):
     contrast_avg, contrast_dev = weighted_mean_and_std(contrast_values, contrast_weights)
     lums_inner = lums[inner_mask]
     lums_outline = lums[outline_mask]
+    lums_opaque = lums[opaque_mask]
 
-    luminance_avg = np.mean(lums)
-    luminance_median = np.median(lums)
+    luminance_avg = np.mean(lums_opaque)
+    luminance_median = np.median(lums_opaque)
     lum_outline_avg = np.mean(lums_outline)
 
     lums_top = lums[top_mask]
@@ -64,8 +65,8 @@ def get_texture_contrast(img):
     lum_top_avg = np.mean(lums_top)
     lum_bottom_avg = np.mean(lums_bottom)
 
-    unique_lums = np.unique(lums)
-    luminance_highlight = ((unique_lums[-1] + unique_lums[-2]) / 2) if len(unique_lums > 2) else luminance_avg
+    unique_lums = np.unique(lums_opaque)
+    luminance_highlight = ((unique_lums[-1] + unique_lums[-2]) / 2) if len(unique_lums) > 2 else luminance_avg
     
     return {
         "area": area, # Number of opaque pixels
@@ -78,7 +79,7 @@ def get_texture_contrast(img):
         "internal_contrast_ratio_avg": float(contrast_avg),
         "internal_contrast_ratio_dev": float(contrast_dev),
         "luminance_avg": float(luminance_avg), # Average luminance
-        "luminance_dev": float(np.std(lums)), # Deviation of luminance
+        "luminance_dev": float(np.std(lums_opaque)), # Deviation of luminance
         "luminance_median": float(luminance_median), # Median of luminance
         "lum_inner_avg": float(np.mean(lums_inner)),
         "lum_inner_dev": float(np.std(lums_inner)),

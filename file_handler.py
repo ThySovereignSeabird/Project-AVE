@@ -1,10 +1,13 @@
 from PIL import Image
 import os
 import csv
+import macos_tags
+from macos_tags import Tag, Color
 
 from texture_analysis import get_texture_contrast_old, get_texture_contrast
 
 LABELS_DIRECTORY = "labels/"
+NAMESPACES_DIRECTORY = "namespaces/"
 
 def load_texture(path):
     """
@@ -37,9 +40,9 @@ def export_namespace(namespace):
         print(f"An error occurred: {e}")
         exit(1)
 
-    export_data(collect_data(label_data, namespace), namespace)
+    export_csv(collect_data(label_data, namespace), namespace)
 
-def export_all():
+def export_all_old():
     """
     Collects data on all namespaces with .csvs in labels/, then exports collective data as .csv.
     """
@@ -62,7 +65,7 @@ def export_all():
         print(f"An error occurred: {e}")
         exit(1)
 
-    export_data(data, "all")
+    export_csv(data, "all")
 
 def collect_data(label_data, namespace):
     """
@@ -86,12 +89,65 @@ def collect_data(label_data, namespace):
 
     return data
 
-def export_data(data, title):
+def export_all():
+    """
+    Collects data on all namespaces listed in namespaces/.txt, then exports collective data as .csv.
+    """
+    data = []
+    try:
+        for fname in sorted(f for f in os.listdir(NAMESPACES_DIRECTORY) if f.endswith(".txt")):
+            with open(f"{NAMESPACES_DIRECTORY}{fname}", mode='r', newline='', encoding='utf-8') as txtfile:
+                for line in txtfile:
+                    namespace = line.strip()
+                    data += collect_features(namespace)
+    except FileNotFoundError:
+        print(f"Error: No .txt in namespaces/ was found.")
+        exit(1)
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        exit(1)
+
+    export_csv(data, "all")
+
+def collect_features(namespace):
+    """
+    Collect features and assign labels on all items from one namespace; return a list of dicts.
+    """
+    data = []
+    folder = get_item_directory(namespace)
+
+    filenames = sorted(f for f in os.listdir(folder) if f.endswith(".png"))
+    for fname in filenames:
+        file_path = os.path.join(folder, fname)
+        
+        context = {"name": f"{namespace}/{fname}",
+                    "outline": outline_label_from_tag(file_path)}
+        img = load_texture(file_path)
+        data.append(context | get_texture_contrast(img))
+
+    if not data:
+        print("No data collected.")
+        exit(1)
+
+    return data
+
+def export_csv(data, title):
     keys = data[0].keys()
     with open(f"output/{title}_item_stats.csv", "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=keys)
         writer.writeheader()
         writer.writerows(data)
+
+def outline_label_from_tag(file_path):
+    tags = macos_tags.get(file_path)
+    if tags:
+        for tag in tags:
+            if tag.color != Color.RED:
+                return "faint"
+            if tag.color != Color.BLUE:
+                return "thick"
+    else:
+        return "exemplar"
   
 def rollcall_namespace(namespace):
     """

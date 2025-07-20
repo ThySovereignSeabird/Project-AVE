@@ -33,7 +33,7 @@ def main():
         elif argv[2] == "rollcall": # python ave.py [namespace] rollcall. Writes .txt of all items in namespace
             rollcall_namespace(argv[1])
 
-        elif argv[2] == "export": # python ave.py [namespace] export. Exports a namespace with a .txt in labels
+        elif argv[2] == "export_old": # python ave.py [namespace] export_old. Exports a namespace with a .txt in labels
             export_namespace(argv[1])
 
         else: # python ave.py [namespace] [item.png]
@@ -56,7 +56,9 @@ def perform_tests(img, print_title):
     """
     print_texture(img)
     print(print_title)
-    pprint.pprint(get_texture_contrast(img))
+    contrast_data = get_texture_contrast(img)
+    pprint.pprint(contrast_data)
+    # print(exemplar_score(contrast_data))
     # img.show()
 
 def print_texture(img):
