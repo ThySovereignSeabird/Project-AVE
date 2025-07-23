@@ -2,7 +2,7 @@ from PIL import Image
 import os
 import csv
 import macos_tags
-from macos_tags import Tag, Color
+from macos_tags import Color
 
 from texture_analysis import get_texture_contrast_old, get_texture_contrast
 
@@ -119,8 +119,9 @@ def collect_features(namespace):
     filenames = sorted(f for f in os.listdir(folder) if f.endswith(".png"))
     for fname in filenames:
         file_path = os.path.join(folder, fname)
-        
+
         context = {"name": f"{namespace}/{fname}",
+                   "group": "train" if namespace == "vanilla" else "test",
                     "outline": outline_label_from_tag(file_path)}
         img = load_texture(file_path)
         data.append(context | get_texture_contrast(img))
@@ -139,13 +140,21 @@ def export_csv(data, title):
         writer.writerows(data)
 
 def outline_label_from_tag(file_path):
-    tags = macos_tags.get(file_path)
+    tags = macos_tags.get_all(file_path)
     if tags:
+        red = False
+        blue = False
         for tag in tags:
-            if tag.color != Color.RED:
-                return "faint"
-            if tag.color != Color.BLUE:
-                return "thick"
+            if tag.color == Color.RED:
+                red = True
+            if tag.color == Color.BLUE:
+                blue = True
+        if red and blue:
+            return "inconsistent"
+        if red:
+            return "faint"
+        else:
+            return "thick"
     else:
         return "exemplar"
   
