@@ -1,7 +1,5 @@
-pillow
-scikit-image
-macos_tags
+matplotlib
+plotly
 
+scikit-image
 pandas
-seaborn
-pysr

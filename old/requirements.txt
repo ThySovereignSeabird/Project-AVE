@@ -1,0 +1,7 @@
+pillow
+scikit-image
+macos_tags
+
+pandas
+seaborn
+pysr
