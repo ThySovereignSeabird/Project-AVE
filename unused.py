@@ -49,3 +49,44 @@ oklab_coords = srgb_to_oklab(srgb_color)
 print("L (Lightness):", oklab_coords[0])
 print("a (Green/Red):", oklab_coords[1])
 print("b (Blue/Yellow):", oklab_coords[2])
+
+
+
+memo_similarity_matrix = []  # 2d array
+
+# Get data
+adjacency_counts = defaultdict(int)
+lateral_neighbors = [
+            (-1,0),
+    (0,-1),         (0,1),
+            (1,0)
+]
+diagonal_neighbors = [
+    (-1,-1), (-1,1),
+    (1,-1), (1,1)
+]
+for current_color in unique_colors:
+    for (y, x) in color_dict[current_color]:
+        for dy, dx in lateral_neighbors:
+            ny = y + dy
+            nx = x + dx
+            maxy = oklab_arr.shape[0]
+            maxx = oklab_arr.shape[1]
+            if ny<0 or nx<0 or ny >= maxy or nx >= maxx:
+                continue
+
+            neighbor = tuple(oklab_arr[ny, nx])
+            #if neighbor == current_color:
+            #    continue
+            if len(neighbor) == 4 and neighbor[3] == 0:
+                continue
+
+            adjacency_counts[(current_color, neighbor)] += 1
+
+ramp_matrix = []
+
+adjacent_neighbors = [
+    (-1,-1),(-1,0),(-1,1),
+    (0,-1),        (0,1),
+    (1,-1), (1,0), (1,1)
+]

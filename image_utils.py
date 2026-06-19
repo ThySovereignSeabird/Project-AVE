@@ -36,7 +36,7 @@ def print_oklab_l(oklab_arr):
     print_image(rgb_grayscale)
 
 
-def get_color_positions(img_arr):
+def get_color_positions(img_arr, include_transparent = False):
     """Return a dict that maps distinct colors to a list of their positions from an image array."""
     color_dict = defaultdict(list)
     height, width, channels = img_arr.shape
@@ -46,7 +46,7 @@ def get_color_positions(img_arr):
         for x in range(width):
             color = tuple(img_arr[y, x])
 
-            if channels == 4:
+            if channels == 4 and not include_transparent:
                 alpha = color[3]
                 if alpha == 0:
                     continue

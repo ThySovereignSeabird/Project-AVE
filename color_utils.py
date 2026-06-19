@@ -122,7 +122,7 @@ def oklab_to_srgb(oklab_array):
 def oklab_dist(color1, color2, w_L=1, w_a=1, w_b=1):
     """
     Calculate the perceptual distance between two Oklab colors.
-    Lightness, a, b are WEIGHTED by parameters w_L, w_a, w_b respectively. 
+    Lightness, a, b are weighted by parameters w_L, w_a, w_b respectively. 
     Accept arrays of shape (3,) or batches of colors (N, 3).
     """
     color1 = np.asarray(color1)
