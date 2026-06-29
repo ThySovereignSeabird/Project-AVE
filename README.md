@@ -18,11 +18,15 @@ The process of constructing a color ramp is as follows:
 - A dict is constructed to map every unique color in the sprite to a list of the positions of all of pixels of that color.
     - The keys of this dict are the list of unique colors in the sprite, including the "transparent" color.
 
-- An adjacency matrix (2D array) tracks whether color i is adjacent to color j in the sprite at least once. This lends credence for ranpiness but is not 
+- An adjacency matrix (2D array) tracks whether color i is adjacent to color j in the sprite at least once. This lends credence to rampiness but is not necessary for it.
 - A distance matrix (2D array), initialized with np.inf, memoizes Oklab distances (floats) between colors as they are computed.
 
 - Let "ramp matrix" where entry [i][j] expresses the confidence that color i is succeeded by color j in the sprite's color ramp.
+- Start by
 - Rampiness (likelihood function justifying connection between colors i and j):
+    - R = w_0 * A
+
+
     - Note that colors i and j are monotonically descending in L.
     - Penalize |ΔL| > constant.
     - Penalize (ΔL / distance) < constant.

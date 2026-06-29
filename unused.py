@@ -90,3 +90,55 @@ adjacent_neighbors = [
     (0,-1),        (0,1),
     (1,-1), (1,0), (1,1)
 ]
+
+
+
+print(lum_diff_matrix[10, 7])
+print(distance_matrix[10, 7])
+print(lum_diff_matrix[10, 7] / distance_matrix[10, 7])
+
+
+
+img = get_image("reimagined", "bowl.png")
+
+%matplotlib inline
+print_image(img)
+
+# srgb array
+img_arr = np.asarray(img)
+
+# oklab array
+oklab_arr = srgb_to_oklab(img_arr)
+print_oklab_l(oklab_arr)
+
+%matplotlib widget
+
+oklab_points = oklab_arr.reshape(-1, 4)[:, :-1]
+graph_colors(oklab_points)
+
+
+
+
+
+
+
+class UndirectedWeightedGraph:
+    def __init__(self):
+        self.graph = defaultdict(set)
+
+    def add_node(self, node):
+        """Add node."""
+        if node not in self.graph:
+            self.graph[node] = set()
+
+    def add_edge(self, node1, node2, ma):
+        """Add edge."""
+        self.add_node(node1)
+        self.add_node(node2)
+        self.graph[node1].add(node2)
+        self.graph[node2].add(node1)
+
+    def __str__(self):
+        for node, neighbors in self.graph.items():
+            printout += (f"{node}: {list(neighbors)}\n")
+        return printout
