@@ -129,6 +129,6 @@ def oklab_dist(color1, color2, w_L=1, w_a=1, w_b=1):
     color2 = np.asarray(color2)
 
     delta = color1 - color2
-    return np.sqrt((delta[..., 0] * w_L)**2 + (delta[..., 1] * w_a)**2 + (delta[..., 2] * w_b)**2)
+    return np.sqrt((delta[..., 0])**2 * w_L + (delta[..., 1])**2 * w_a + (delta[..., 2])**2 * w_b)
 
     # return np.linalg.norm(color1 - color2, axis=-1)

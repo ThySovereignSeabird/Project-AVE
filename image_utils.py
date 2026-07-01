@@ -60,7 +60,7 @@ class Sprite:
         # spatial adjacency pass
         row_indices, col_indices = np.where(opaque_mask)
         for i, j in zip(row_indices, col_indices):
-            u = self.oklab_arr[i, j][:3]
+            u = self.oklab_arr[i, j][:3]  # srgb
 
             # check neighbors
             for dir_idx, (di, dj, weight) in enumerate(self.weighted_adjacencies):
@@ -69,7 +69,7 @@ class Sprite:
                 if new_i<0 or new_j<0 or new_i >= max_i or new_j >= max_j:
                     continue
 
-                v = self.oklab_arr[new_i, new_j]
+                v = self.oklab_arr[new_i, new_j]  # srgb
                 if v[3] != 255:
                     continue
                 v = v[:3]
@@ -94,26 +94,25 @@ class Sprite:
 
                     colors_are_same = np.array_equal(v, w)
                     if not colors_are_same:
-                        self.boost_edge_by_distance(v, w, weight * contour_multplier)
+                        self.boost_edge_by_distance(v, w, contour_multplier)
 
         # divide relative adjacencies
         # color similarity pass
         colors = self.palette.keys()
         for u in colors:
             for v in colors:
-                if np.array_equal(u, v):
+                if u == v:
                     continue
 
-                u_tuple, v_tuple = tuple(u), tuple(v)
-                if not self.connectivity_graph.has_edge(u_tuple, v_tuple):
+                if not self.connectivity_graph.has_edge(u, v):
                     self.boost_edge_by_distance(u, v, similarity_multiplier)
                     continue
 
-                curr_weight = self.connectivity_graph[u_tuple][v_tuple].get("weight", 0)
-                denominator = min(self.palette[u_tuple], self.palette[v_tuple])
+                curr_weight = self.connectivity_graph[u][v].get("weight", 0)
+                denominator = min(self.palette[u], self.palette[v])
                 new_weight = curr_weight / (denominator + 0.001)
 
-                self.connectivity_graph.add_edge(u_tuple, v_tuple, weight=new_weight)
+                self.connectivity_graph.add_edge(u, v, weight=new_weight)
 
         return self.connectivity_graph
 
